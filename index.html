@@ -1,0 +1,210 @@
+<!doctype html>
+<html lang="id">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>TO DO LIST - KABINET SERASI</title>
+  <style>
+    :root{ --bg:#f6f7fb; --card:#fff; --accent:#500006; --muted:#6b7280; --border:#e6e9ef; }
+    *{box-sizing:border-box}
+    body{
+      margin: 0;
+      font-family: Inter, system-ui, sans-serif;
+      background: url("serasi.png") no-repeat center center fixed;
+      background-size: cover;
+    }
+    .container{max-width:1100px;margin:28px auto;padding:20px;background:rgba(255,255,255,0.9);border-radius:12px}
+    header h1{margin:0 0 14px;font-size:22px}
+    .division-tabs{display:flex;gap:8px;flex-wrap:nowrap;overflow:auto;padding-bottom:10px;margin-bottom:14px}
+    .division-tabs button{white-space:nowrap;padding:8px 12px;border-radius:8px;border:1px solid var(--border);background:transparent;cursor:pointer}
+    .division-tabs button.active{background:var(--accent);color:white;border-color:var(--accent)}
+    .card{background:var(--card);border:1px solid var(--border);border-radius:10px;padding:16px;box-shadow:0 2px 6px rgba(16,24,40,0.03)}
+    .form-row{display:flex;gap:8px;flex-wrap:wrap;margin-bottom:12px}
+    .form-row input{padding:8px;border-radius:8px;border:1px solid var(--border)}
+    .btn{padding:8px 12px;border-radius:8px;border:0;background:var(--accent);color:#fff;cursor:pointer}
+    .list{margin-top:8px;display:flex;flex-direction:column;gap:8px}
+    .item{display:flex;align-items:center;justify-content:space-between;gap:10px;padding:10px;border-radius:8px;border:1px solid var(--border);background:#fff}
+    .item.done span{text-decoration:line-through;color:gray}
+    .small-btn{padding:4px 8px;border-radius:6px;border:1px solid var(--border);background:var(--accent);color:#fff;cursor:pointer}
+    .small-btn.danger{background:#f87171}
+    .btn-group{display:flex;gap:6px;}
+  </style>
+</head>
+<body>
+<div class="container">
+  <header>
+    <h1>To Do List — Kabinet Serasi</h1>
+    <p style="margin:6px 0 18px;color:var(--muted)">
+      Pilih divisi → buat tanggal rapat → pilih rapat → baru bisa menambah To Do List.  
+      Checklist jika tugas sudah selesai ✅
+    </p>
+  </header>
+
+  <div id="divTabs" class="division-tabs"></div>
+  <div id="contentArea" class="card"></div>
+</div>
+
+<!-- Firebase SDK -->
+<script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-app.js"></script>
+<script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-database.js"></script>
+
+<script>
+  // Firebase config
+  const firebaseConfig = {
+    apiKey: "AIzaSyAJu9FIhmevm0xwnqatXiblT30NleOz6qc",
+    authDomain: "hpmi-amman.firebaseapp.com",
+    databaseURL: "https://hpmi-amman-default-rtdb.asia-southeast1.firebasedatabase.app",
+    projectId: "hpmi-amman",
+    storageBucket: "hpmi-amman.firebasestorage.app",
+    messagingSenderId: "763948650563",
+    appId: "1:763948650563:web:88625e20b21ae2fc8c84f6",
+    measurementId: "G-0BHNT9Q5YK"
+  };
+  const app = firebase.initializeApp(firebaseConfig);
+  const db = firebase.database();
+
+  const divisions = [
+    "Gubernur","Sekretaris Daerah","Bendahara Daerah",
+    "Pendidikan dan Kemahasiswaan","Sosial dan Masyarakat",
+    "Dana dan Usaha","Media dan Informasi",
+    "Seni Budaya dan Olahraga","Pengendalian Internal dan Aset Organisasi"
+  ];
+
+  let data = {};
+  let activeDiv = divisions[0];
+
+  // Ambil data dari Firebase
+  firebase.database().ref("divisions").on("value", snapshot=>{
+    data = snapshot.val() || {};
+    divisions.forEach(d=>{
+      if(!data[d]) data[d] = {meetings:[], selected:null};
+    });
+    render();
+  });
+
+  // Simpan data ke Firebase
+  function save(){
+    firebase.database().ref("divisions").set(data);
+  }
+
+  function renderTabs(){
+    const tabs=document.getElementById("divTabs");
+    tabs.innerHTML="";
+    divisions.forEach(d=>{
+      const btn=document.createElement("button");
+      btn.textContent=d;
+      btn.className=d===activeDiv?"active":"";
+      btn.onclick=()=>{
+        activeDiv=d; render();
+      };
+      tabs.appendChild(btn);
+    });
+  }
+
+  function render(){
+    renderTabs();
+    const divData=data[activeDiv];
+    const content=document.getElementById("contentArea");
+    content.innerHTML="";
+
+    // Form tambah rapat
+    const form=document.createElement("div");
+    form.className="form-row";
+    form.innerHTML=`
+      <input type="date" class="meet-date">
+      <button class="btn">Tambah Rapat</button>
+    `;
+    form.querySelector("button").onclick=()=>{
+      const date=form.querySelector(".meet-date").value;
+      if(!date) return alert("Isi tanggal rapat!");
+      const id=Date.now();
+      divData.meetings.push({id,date,tasks:[]});
+      divData.selected=id;
+      save();
+    };
+    content.appendChild(form);
+
+    // Daftar rapat
+    divData.meetings.forEach(m=>{
+      const wrap=document.createElement("div");
+      wrap.className="item"+(m.id===divData.selected?" selected":"");
+
+      const span=document.createElement("span");
+      span.innerHTML=`<strong>Rapat: ${m.date}</strong>`;
+      wrap.appendChild(span);
+
+      // Tombol pilih + edit + delete
+      const btnGroup=document.createElement("div");
+      btnGroup.className="btn-group";
+
+      const pilihBtn=document.createElement("button");
+      pilihBtn.textContent="Pilih";
+      pilihBtn.className="small-btn";
+      pilihBtn.onclick=()=>{divData.selected=m.id; save();};
+      btnGroup.appendChild(pilihBtn);
+
+      const editBtn=document.createElement("button");
+      editBtn.textContent="Edit";
+      editBtn.className="small-btn";
+      editBtn.onclick=()=>{
+        const newDate = prompt("Ubah tanggal rapat (YYYY-MM-DD):", m.date);
+        if(newDate){ m.date=newDate; save(); }
+      };
+      btnGroup.appendChild(editBtn);
+
+      const deleteBtn=document.createElement("button");
+      deleteBtn.textContent="❌";
+      deleteBtn.className="small-btn danger";
+      deleteBtn.onclick=()=>{
+        if(confirm("Hapus rapat ini?")){
+          divData.meetings = divData.meetings.filter(x=>x.id!==m.id);
+          if(divData.selected===m.id) divData.selected=null;
+          save();
+        }
+      };
+      btnGroup.appendChild(deleteBtn);
+
+      wrap.appendChild(btnGroup);
+      content.appendChild(wrap);
+
+      // Form tambah task & daftar task jika rapat dipilih
+      if(m.id===divData.selected){
+        const tf=document.createElement("div");
+        tf.className="form-row";
+        tf.innerHTML=`
+          <input type="text" class="task-name" placeholder="Nama Tugas">
+          <input type="text" class="task-pic" placeholder="PIC">
+          <input type="date" class="task-deadline">
+          <button class="btn">Tambah Task</button>
+        `;
+        tf.querySelector("button").onclick=()=>{
+          const name=tf.querySelector(".task-name").value;
+          const pic=tf.querySelector(".task-pic").value;
+          const deadline=tf.querySelector(".task-deadline").value;
+          if(!name||!pic||!deadline) return alert("Isi semua field task!");
+          m.tasks.push({id:Date.now(),name,pic,deadline,done:false});
+          save();
+        };
+        content.appendChild(tf);
+
+        m.tasks.forEach(t=>{
+          const row=document.createElement("div");
+          row.className="item"+(t.done?" done":"");
+          const left=document.createElement("div");
+          left.style.display="flex"; left.style.alignItems="center"; left.style.gap="8px";
+          const cb=document.createElement("input"); cb.type="checkbox"; cb.checked=t.done;
+          cb.onchange=()=>{t.done=!t.done; save();};
+          const span=document.createElement("span");
+          span.innerHTML=`<strong>${t.name}</strong> — PIC: ${t.pic}, Deadline: ${t.deadline}`;
+          left.appendChild(cb); left.appendChild(span);
+          const del=document.createElement("button"); del.textContent="❌"; del.className="small-btn danger";
+          del.onclick=()=>{ if(confirm("Hapus task ini?")){ m.tasks=m.tasks.filter(x=>x.id!==t.id); save(); }};
+          row.appendChild(left); row.appendChild(del);
+          content.appendChild(row);
+        });
+      }
+    });
+  }
+</script>
+</body>
+</html>
